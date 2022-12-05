@@ -1,6 +1,6 @@
 import argparse
 import math
-import os, glob
+import os, glob, io
 from typing import Tuple
 from collections import defaultdict
 import numpy as np
@@ -10,22 +10,11 @@ from PIL import Image
 
 RESOLUTION = 256
 
-def load_beans_dataset(args):
-    hf_dataset_identifier = "beans"
-    ds = datasets.load_dataset(hf_dataset_identifier)
-
-    ds = ds.shuffle(seed=1)
-    ds = ds["train"].train_test_split(test_size=args.split, seed=args.seed)
-    train_ds = ds["train"]
-    val_ds = ds["test"]
-
-    return train_ds, val_ds
-
 def load_cls_dataset(args):
     img_path = glob.glob(os.path.join(args.input_path, '**/*.jpg'),recursive=True)
     train_ds=defaultdict(list)
     test_ds =defaultdict(list)
-    for idx, i in enumerate(img_path):
+    for idx, i in enumerate(img_path[:100]):
         if idx < len(img_path)*0.8:
             train_ds['image'].append(Image.open(i))
             train_ds['label'].append(int(i.split('/')[-2]))
@@ -35,51 +24,36 @@ def load_cls_dataset(args):
     return train_ds, test_ds
 
 
-def resize_img(
-    image: tf.Tensor, label: tf.Tensor, resize: int
-) -> Tuple[tf.Tensor, tf.Tensor]:
-    image = tf.image.resize(image, (resize, resize))
-    return image, label
+def process_image(img, resize):
+    img = img.resize((resize, resize), Image.LANCZOS)
+    return img
 
-
-def process_image(
-    image: Image, label: Image, resize: int
-) -> Tuple[tf.Tensor, tf.Tensor]:
-    image = np.array(image)
-    label = np.array(label)
-
-    image = tf.convert_to_tensor(image)
-    label = tf.convert_to_tensor(label)
-
-    if resize:
-        image, label = resize_img(image, label, resize)
-
-    return image, label
-
-
-def _int64_feature(value):
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
-
+def _bytes_feature(value):
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 def _float_feature(value):
-    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+    return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+
+def _int64_feature(value):
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 
 def create_tfrecord(image: Image, label: Image, resize: int):
-    image, label = process_image(image, label, resize)
-    image_dims = image.shape
-
-    image = tf.reshape(image, [-1])  # flatten to 1D array
-    label = tf.reshape(label, [-1])  # flatten to 1D array
+    img = process_image(image,resize)
+    img_dims = np.array(img).shape
+   
+    byte_io = io.BytesIO()
+    img.save(byte_io, format='PNG')
+    byte_img = byte_io.getvalue()
 
     return tf.train.Example(
         features=tf.train.Features(
             feature={
-                "image": _float_feature(image.numpy()),
-                "image_shape": _int64_feature(
-                    [image_dims[0], image_dims[1], image_dims[2]]
-                ),
-                "label": _int64_feature(label.numpy()),
+                "image": _bytes_feature(byte_img),
+                "image_shape_0": _int64_feature(img_dims[0]),
+                "image_shape_1": _int64_feature(img_dims[1]),
+                "image_shape_2": _int64_feature(img_dims[2]),
+                "label": _int64_feature(int(label)),
             }
         )
     ).SerializeToString()
