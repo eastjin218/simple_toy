@@ -3,7 +3,7 @@ import pprint
 import tensorflow as tf
 
 from tools.data_loader import DataLoader
-from tools.trainer import SingleTrainer
+from tools.trainer import SingleTrainer, DistriTrainer
 from tools.models import ClsModel
 from tools.losses import CustomLoss
 # from tools.optimizers import adam_opti
@@ -37,6 +37,10 @@ def define_argparser(is_continue=False):
         action='store_true'
     )
     p.add_argument(
+        '--custom_opti',
+        action='store_true'
+    )
+    p.add_argument(
         '--batch_size',
         default=8
     )
@@ -55,7 +59,7 @@ def get_dataloader(input_path, batch_size, is_distribute=False, strategy=None):
     data_loader = DataLoader(input_path, batch_size)
     loader = data_loader.cls_tfrecord()
     if is_distribute:
-        distri_loader = strategey.experimental_distribute_dataset(loader)
+        distri_loader = strategy.experimental_distribute_dataset(loader)
         return distri_loader
     return loader
 
@@ -74,15 +78,23 @@ def get_loss(config, strategy=None):
         loss = tf.keras.losses.CategoricalCrossentropy()
     return loss
 
-# def get_optimizer(config):
-#     if config.custom_opti:
-#         opti = CostomOpti()
-#     else:
-#         opti = tf.keras.optimizers.Adam()
-#     return opti
+def get_optimizer(config):
+    if config.custom_opti:
+        # opti = CostomOpti()
+        pass
+    else:
+        opti = tf.keras.optimizers.Adam()
+    return opti
 
 # def get_scheduler():
 #     pass
+
+def get_trainer(dataloader, model, loss, optimizer, scheduler, strategy):
+    if strategy:
+        trainer = DistriTrainer(dataloader, model, loss, optimizer, scheduler, strategy)
+    else:
+        trainer = SingleTrainer(dataloader, model, loss, optimizer, scheduler)
+    return trainer
 
 def main(config):
     def print_config(config):
@@ -101,12 +113,12 @@ def main(config):
     model = get_model(config)
     loss = get_loss(config, strategy)
     # opti = get_optimizer(config)
-    trainer = SingleTrainer(
+    trainer = get_trainer(
         dataset = loader,
         model = model,
         loss = loss,
         optimizer = opti,
-        strategey = strategy
+        strategy=strategy,
     )
     trainer.run()
 
