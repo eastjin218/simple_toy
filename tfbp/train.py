@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from tools.data_loader import DataLoader
 from tools.trainer import SingleTrainer, DistriTrainer
-from tools.models import ClsModel
+from tools.models import ClsModel, PretrainedClsModel
 from tools.losses import CustomLoss
 # from tools.optimizers import adam_opti
 
@@ -72,7 +72,7 @@ def get_model(config):
         model = tf.keras.models.load_model(config.load_fn)
         print(f'load model done!! {os.path.basename(config.load_fn)}')
     else:
-        model = ClsModel(input_dim=config.input_dim, output_dim=config.output_dim)
+        model = PretrainedClsModel(input_dim=config.input_dim, output_dim=config.output_dim)
         raw_input = (config.input_dim, config.input_dim, 3)
         model.build_graph(raw_input).summary()
     return model
