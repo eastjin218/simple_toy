@@ -1,4 +1,4 @@
-import argparse
+import argparse, os
 import pprint
 import tensorflow as tf
 
@@ -11,22 +11,22 @@ from tools.losses import CustomLoss
 def define_argparser(is_continue=False):
     p = argparse.ArgumentParser()
 
-    if is_continue:
-        p.add_argument(
-            '--load_fn',
-            required=True,
-        )
-    
-    # p.add_argument(
-    #     '--model_fn',
-    #     required=not is_continue,
-    # )
+    p.add_argument(
+        '--load_fn',
+        default=None,
+        help='./models/cls_model.h5py'
+    )
     p.add_argument(
         '--input_path',
         help='./cls-tfrecords'
     )
     p.add_argument(
-        '--output_path'
+        '--output_path',
+        help='./models'
+    )
+    p.add_argument(
+        '--model_fn',
+        default=None
     )
     p.add_argument(
         '--is_distribute',
@@ -43,6 +43,10 @@ def define_argparser(is_continue=False):
     p.add_argument(
         '--batch_size',
         default=8
+    )
+    p.add_argument(
+        '--epochs',
+        default=3
     )
     p.add_argument(
         '--input_dim',
@@ -64,9 +68,13 @@ def get_dataloader(input_path, batch_size, is_distribute=False, strategy=None):
     return loader
 
 def get_model(config):
-    model = ClsModel(input_dim=config.input_dim, output_dim=config.output_dim)
-    raw_input = (config.input_dim, config.input_dim, 3)
-    model.build_graph(raw_input).summary()
+    if config.load_fn:
+        model = tf.keras.models.load_model(config.load_fn)
+        print(f'load model done!! {os.path.basename(config.load_fn)}')
+    else:
+        model = ClsModel(input_dim=config.input_dim, output_dim=config.output_dim)
+        raw_input = (config.input_dim, config.input_dim, 3)
+        model.build_graph(raw_input).summary()
     return model
 
 def get_loss(config, strategy=None):
@@ -74,9 +82,7 @@ def get_loss(config, strategy=None):
         if config.custom_loss:
             loss = CustomLoss(strategy=strategy)
         else:
-            loss = tf.keras.losses.SparseCategoricalCrossentropy(
-                from_logits=True,
-                reduction= tf.keras.losses.Reduction.None)
+            loss = tf.keras.losses.CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
     else:
         if config.custom_loss:
             loss = CustomLoss(strategy=strategy)
@@ -95,8 +101,8 @@ def get_optimizer(config):
 # def get_scheduler():
 #     pass
 
-def get_trainer(dataloader, model, loss, optimizer, scheduler, strategy, 
-                epochs, batch_size, global_step):
+def get_trainer(dataloader, model, loss, optimizer, strategy, 
+                epochs, batch_size, global_step, scheduler=None,):
     if strategy:
         trainer = DistriTrainer(dataloader, model, loss, optimizer, scheduler,
                                 strategy, epochs, batch_size, global_step)
@@ -124,22 +130,25 @@ def main(config):
     loss = get_loss(config, strategy)
     opti = get_optimizer(config)
     trainer = get_trainer(
-        dataset = loader,
+        dataloader = loader,
         model = model,
         loss = loss,
         optimizer = opti,
         strategy=strategy,
-        epochs = config.epochs
-        batch_size=config.batch_size
-        global_step=global_step
+        epochs = config.epochs,
+        batch_size=config.batch_size,
+        global_step=global_step,
     )
     trainer.run()
-
-    # a = next(iter(loader))
-    # for i in a:
-    #     model(i)
-    #     break
+    trainer.save(config.output_path, config.model_fn)
+    # count = 0
+    # for i in loader:
+    #     print(i)
+    #     count +=1
+    # print(count)
         
 if __name__=="__main__":
+    # single > python train.py --input_path ./dataset/cls-tfrecords --output_path ./models/
+    # single continue > python train.py --input_path ./dataset/cls-tfrecords --load_fn ./models/cls_model.h5py --output_path ./models
     config = define_argparser()
     main(config)

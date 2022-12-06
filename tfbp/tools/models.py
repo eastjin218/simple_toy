@@ -1,5 +1,5 @@
 import tensorflow as tf
-from layers import ConvModule
+from tools.layers import ConvModule
 
 class ClsModel(tf.keras.Model):
     def __init__(self, input_dim, output_dim):
@@ -15,6 +15,8 @@ class ClsModel(tf.keras.Model):
         self.conv2 = tf.keras.layers.Conv2D(64, 3, activation="relu")
         self.bn2   = tf.keras.layers.BatchNormalization()
         self.drop  = tf.keras.layers.Dropout(0.3)
+        self.flat  = tf.keras.layers.Flatten()
+        self.dense_1 = tf.keras.layers.Dense(6)
 
     def call(self, input_tensor):
         x = self.conv1(input_tensor)
@@ -24,6 +26,8 @@ class ClsModel(tf.keras.Model):
         x = self.conv2(x)
         x = self.bn2(x)
         x = self.drop(x)
+        x = self.flat(x)
+        x = self.dense_1(x)
         return x
 
     def build_graph(self, raw_shape):

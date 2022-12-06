@@ -4,8 +4,8 @@ class ConvModule(tf.keras.layers.Layer):
     def __init__(self, filter, kernel_size, strides=1, padding='same'):
         super(ConvModule, self).__init__()
         self.conv = tf.keras.layers.Conv2D(
+            filters= filter,
             kernel_size=kernel_size,
-            kernel_num=kernel_num,
             strides = (strides, strides),
             padding=padding
         )
