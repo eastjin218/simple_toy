@@ -70,12 +70,18 @@ def get_model(config):
     return model
 
 def get_loss(config, strategy=None):
-    if config.custom_loss:
-        loss = CustomLoss(strategy=strategy)
-    elif strategy:
-        with
+    if strategy:
+        if config.custom_loss:
+            loss = CustomLoss(strategy=strategy)
+        else:
+            loss = tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=True,
+                reduction= tf.keras.losses.Reduction.None)
     else:
-        loss = tf.keras.losses.CategoricalCrossentropy()
+        if config.custom_loss:
+            loss = CustomLoss(strategy=strategy)
+        else:
+            loss = tf.keras.losses.SparseCategoricalCrossentropy()
     return loss
 
 def get_optimizer(config):
@@ -89,11 +95,14 @@ def get_optimizer(config):
 # def get_scheduler():
 #     pass
 
-def get_trainer(dataloader, model, loss, optimizer, scheduler, strategy):
+def get_trainer(dataloader, model, loss, optimizer, scheduler, strategy, 
+                epochs, batch_size, global_step):
     if strategy:
-        trainer = DistriTrainer(dataloader, model, loss, optimizer, scheduler, strategy)
+        trainer = DistriTrainer(dataloader, model, loss, optimizer, scheduler,
+                                strategy, epochs, batch_size, global_step)
     else:
-        trainer = SingleTrainer(dataloader, model, loss, optimizer, scheduler)
+        trainer = SingleTrainer(dataloader, model, loss, optimizer, scheduler,
+                                epochs, batch_size, global_step)
     return trainer
 
 def main(config):
@@ -102,6 +111,7 @@ def main(config):
         pp.pprint(vars(config))
     print_config(config)
     strategy = None
+    global_step=0
     if config.is_distribute:
         strategy = tf.distribute.MirroredStrategy()
     loader = get_dataloader(config.input_path,
@@ -112,20 +122,24 @@ def main(config):
     # print(next(iter(loader))) # dataloader test code
     model = get_model(config)
     loss = get_loss(config, strategy)
-    # opti = get_optimizer(config)
+    opti = get_optimizer(config)
     trainer = get_trainer(
         dataset = loader,
         model = model,
         loss = loss,
         optimizer = opti,
         strategy=strategy,
+        epochs = config.epochs
+        batch_size=config.batch_size
+        global_step=global_step
     )
     trainer.run()
 
-    a = next(iter(loader))
-    for i in a:
-        model(i)
-        break
+    # a = next(iter(loader))
+    # for i in a:
+    #     model(i)
+    #     break
+        
 if __name__=="__main__":
     config = define_argparser()
     main(config)
